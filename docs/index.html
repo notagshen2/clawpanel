@@ -257,6 +257,48 @@
     .deploy-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
     .deploy-desc { font-size: 14px; color: var(--text-s); }
 
+    /* ══════════════ Docs Center ══════════════ */
+    .docs-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .doc-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; gap: 16px; align-items: flex-start; backdrop-filter: blur(12px); transition: all 0.3s; cursor: pointer; position: relative; overflow: hidden; }
+    .doc-card::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(99,102,241,0.06), transparent 60%); opacity: 0; transition: opacity 0.4s; pointer-events: none; }
+    .doc-card:hover::before { opacity: 1; }
+    .doc-card:hover { border-color: var(--border-h); transform: translateY(-3px); box-shadow: 0 12px 40px rgba(99,102,241,0.08); }
+    .doc-icon { flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+    .doc-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .doc-card p { color: var(--text-s); font-size: 13px; margin-bottom: 8px; }
+    .doc-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .doc-tag { padding: 2px 8px; background: rgba(255,255,255,0.06); border-radius: 4px; font-size: 11px; color: var(--text-t); }
+    @media (max-width: 640px) { .docs-grid { grid-template-columns: 1fr; } }
+
+    /* Markdown Reader Modal */
+    .md-reader { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: none; justify-content: center; align-items: flex-start; padding: 40px 20px; overflow-y: auto; }
+    .md-reader.active { display: flex; }
+    .md-reader-inner { background: var(--bg); border: 1px solid var(--border); border-radius: 16px; max-width: 820px; width: 100%; position: relative; }
+    .md-reader-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); border-radius: 16px 16px 0 0; z-index: 1; }
+    .md-reader-header h3 { font-size: 16px; font-weight: 700; }
+    .md-reader-header a { color: var(--text-s); font-size: 13px; margin-right: 16px; }
+    .md-reader-header a:hover { color: var(--accent); }
+    .md-reader-close { background: none; border: none; color: var(--text-s); cursor: pointer; padding: 4px; border-radius: 8px; transition: all 0.2s; }
+    .md-reader-close:hover { background: var(--surface); color: var(--text); }
+    .md-reader-body { padding: 32px; line-height: 1.8; font-size: 15px; }
+    .md-reader-body h1 { font-size: 24px; font-weight: 800; margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .md-reader-body h2 { font-size: 20px; font-weight: 700; margin: 28px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+    .md-reader-body h3 { font-size: 17px; font-weight: 600; margin: 24px 0 8px; }
+    .md-reader-body p { margin-bottom: 12px; }
+    .md-reader-body ul, .md-reader-body ol { margin-bottom: 12px; padding-left: 24px; }
+    .md-reader-body li { margin-bottom: 4px; }
+    .md-reader-body code { background: var(--surface); padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+    .md-reader-body pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; margin-bottom: 16px; }
+    .md-reader-body pre code { background: none; padding: 0; font-size: 13px; }
+    .md-reader-body table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 14px; }
+    .md-reader-body th, .md-reader-body td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+    .md-reader-body th { background: var(--surface); font-weight: 600; }
+    .md-reader-body blockquote { border-left: 3px solid var(--accent); padding: 8px 16px; margin: 12px 0; color: var(--text-s); background: var(--surface); border-radius: 0 8px 8px 0; }
+    .md-reader-body a { color: var(--accent); text-decoration: none; }
+    .md-reader-body a:hover { text-decoration: underline; }
+    .md-reader-body hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+    .md-loading { text-align: center; padding: 60px; color: var(--text-t); }
+
     /* ══════════════ Ecosystem ══════════════ */
     .eco-list { display: flex; flex-direction: column; gap: 16px; }
     .eco-card { display: flex; align-items: center; justify-content: space-between; border-radius: 16px; border: 1px solid var(--border); background: var(--bg-card); backdrop-filter: blur(8px); padding: 24px; transition: all 0.3s; }
@@ -400,6 +442,7 @@
         <a href="#tech" class="nav-link">架构</a>
         <a href="#quickstart" class="nav-link">开始</a>
         <a href="#deploy" class="nav-link">部署</a>
+        <a href="#docs" class="nav-link">文档</a>
         <a href="#community" class="nav-link">社区</a>
         <a href="#download" class="nav-link">下载</a>
         <a href="https://github.com/qingchencloud/clawpanel" target="_blank" rel="noopener" class="nav-link">GitHub</a>
@@ -424,6 +467,7 @@
         <a href="#tech" class="mobile-menu-link mobile-link">架构</a>
         <a href="#quickstart" class="mobile-menu-link mobile-link">开始</a>
         <a href="#deploy" class="mobile-menu-link mobile-link">部署</a>
+        <a href="#docs" class="mobile-menu-link mobile-link">文档</a>
         <a href="#community" class="mobile-menu-link mobile-link">社区</a>
         <a href="https://github.com/qingchencloud/clawpanel" target="_blank" rel="noopener" class="mobile-menu-link">GitHub ↗</a>
       </div>
@@ -756,6 +800,86 @@
     </div>
   </section>
 
+  <!-- ══════════════ Docs Center ══════════════ -->
+  <section id="docs" class="section">
+    <div class="grid-bg"></div>
+    <div class="container-sm" style="position:relative;z-index:10">
+      <div class="section-header">
+        <h2 class="reveal section-title"><span class="gradient-text">文档中心</span></h2>
+        <p class="reveal section-desc">遇到问题？这里有你需要的一切</p>
+      </div>
+      <div class="docs-grid">
+        <div class="reveal doc-card" onclick="openDoc('linux-deploy.md','Linux 服务器部署指南')">
+          <div class="doc-icon" style="background:rgba(234,179,8,0.12);color:#eab308">🖥️</div>
+          <div>
+            <h3>Linux 部署指南</h3>
+            <p>从零开始在 Linux 服务器上部署 OpenClaw Gateway，一键脚本 + 手动安装两种方式</p>
+            <div class="doc-tags">
+              <span class="doc-tag">一键部署</span>
+              <span class="doc-tag">systemd</span>
+              <span class="doc-tag">PM2</span>
+              <span class="doc-tag">Nginx 反代</span>
+            </div>
+          </div>
+        </div>
+        <div class="reveal doc-card" onclick="openDoc('docker-deploy.md','Docker 部署指南')">
+          <div class="doc-icon" style="background:rgba(34,211,238,0.12);color:#22d3ee">🐳</div>
+          <div>
+            <h3>Docker 部署指南</h3>
+            <p>容器化部署 OpenClaw，支持 Compose 编排、自定义镜像、Ollama 联动、多实例</p>
+            <div class="doc-tags">
+              <span class="doc-tag">Docker Compose</span>
+              <span class="doc-tag">Dockerfile</span>
+              <span class="doc-tag">Ollama</span>
+              <span class="doc-tag">反向代理</span>
+            </div>
+          </div>
+        </div>
+        <div class="reveal doc-card" onclick="openDoc('../README.md','ClawPanel 项目主页')">
+          <div class="doc-icon" style="background:rgba(99,102,241,0.12);color:#6366f1">📖</div>
+          <div>
+            <h3>项目主页 README</h3>
+            <p>完整的项目介绍，包含安装方式、功能特性、技术架构、源码构建、常见问题</p>
+            <div class="doc-tags">
+              <span class="doc-tag">安装指南</span>
+              <span class="doc-tag">功能介绍</span>
+              <span class="doc-tag">源码构建</span>
+              <span class="doc-tag">常见问题</span>
+            </div>
+          </div>
+        </div>
+        <div class="reveal doc-card" onclick="openDoc('../CHANGELOG.md','更新日志')">
+          <div class="doc-icon" style="background:rgba(168,85,247,0.12);color:#a855f7">📋</div>
+          <div>
+            <h3>更新日志</h3>
+            <p>每个版本的新增功能、Bug 修复和改进记录</p>
+            <div class="doc-tags">
+              <span class="doc-tag">新功能</span>
+              <span class="doc-tag">Bug 修复</span>
+              <span class="doc-tag">版本记录</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Markdown Reader Modal -->
+  <div class="md-reader" id="mdReader" onclick="if(event.target===this)closeDoc()">
+    <div class="md-reader-inner">
+      <div class="md-reader-header">
+        <h3 id="mdTitle"></h3>
+        <div style="display:flex;align-items:center;gap:8px">
+          <a id="mdGithubLink" href="#" target="_blank" rel="noopener">在 GitHub 上查看</a>
+          <button class="md-reader-close" onclick="closeDoc()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="md-reader-body" id="mdContent"></div>
+    </div>
+  </div>
+
   <!-- ══════════════ Ecosystem ══════════════ -->
   <section id="projects" class="section">
     <div class="grid-bg"></div>
@@ -1049,7 +1173,7 @@
     });
 
     /* ── 3D Tilt on Tech & Gallery Cards ── */
-    document.querySelectorAll('.tech-card, .gallery-card, .eco-card').forEach(function(card) {
+    document.querySelectorAll('.tech-card, .gallery-card, .eco-card, .doc-card').forEach(function(card) {
       card.classList.add('tilt-card');
       card.addEventListener('mousemove', function(e) {
         var r = card.getBoundingClientRect();
@@ -1060,6 +1184,96 @@
       card.addEventListener('mouseleave', function() {
         card.style.transform = '';
       });
+    });
+    /* ── Doc Card Spotlight ── */
+    document.querySelectorAll('.doc-card').forEach(function(card) {
+      card.addEventListener('mousemove', function(e) {
+        var r = card.getBoundingClientRect();
+        card.style.setProperty('--mouse-x', ((e.clientX - r.left) / r.width * 100) + '%');
+        card.style.setProperty('--mouse-y', ((e.clientY - r.top) / r.height * 100) + '%');
+      });
+    });
+
+    /* ── Markdown Reader ── */
+    var GITHUB_RAW = 'https://raw.githubusercontent.com/qingchencloud/clawpanel/main/';
+    var GITHUB_BLOB = 'https://github.com/qingchencloud/clawpanel/blob/main/';
+    var docCache = {};
+    var markedLoaded = false;
+
+    function loadMarked(cb) {
+      if (markedLoaded) return cb();
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/marked@15/marked.min.js';
+      s.onload = function() { markedLoaded = true; cb(); };
+      s.onerror = function() { cb(true); };
+      document.head.appendChild(s);
+    }
+
+    function openDoc(file, title) {
+      var reader = document.getElementById('mdReader');
+      var content = document.getElementById('mdContent');
+      var titleEl = document.getElementById('mdTitle');
+      var ghLink = document.getElementById('mdGithubLink');
+
+      titleEl.textContent = title;
+      var blobPath = file.replace(/^\.\.\//g, '');
+      if (!blobPath.startsWith('docs/') && blobPath !== 'README.md' && blobPath !== 'CHANGELOG.md') blobPath = 'docs/' + blobPath;
+      ghLink.href = GITHUB_BLOB + blobPath;
+      reader.classList.add('active');
+      document.body.style.overflow = 'hidden';
+
+      if (docCache[file]) {
+        renderDoc(docCache[file], content);
+        return;
+      }
+
+      content.innerHTML = '<div class="md-loading">加载中...</div>';
+
+      loadMarked(function(err) {
+        if (err) {
+          content.innerHTML = '<div class="md-loading">marked.js 加载失败，<a href="' + ghLink.href + '" target="_blank">在 GitHub 上查看</a></div>';
+          return;
+        }
+        var rawPath = file.startsWith('../') ? file.replace('../', '') : 'docs/' + file;
+        fetch(GITHUB_RAW + rawPath)
+          .then(function(res) { if (!res.ok) throw new Error(res.status); return res.text(); })
+          .then(function(md) {
+            docCache[file] = md;
+            renderDoc(md, content);
+          })
+          .catch(function() {
+            content.innerHTML = '<div class="md-loading">文档加载失败，<a href="' + ghLink.href + '" target="_blank">在 GitHub 上查看原文</a></div>';
+          });
+      });
+    }
+
+    function renderDoc(md, container) {
+      container.innerHTML = marked.parse(md);
+      container.querySelectorAll('a').forEach(function(a) {
+        var href = a.getAttribute('href');
+        if (!href) return;
+        if (href.charAt(0) === '#') {
+          a.onclick = function(e) {
+            e.preventDefault();
+            var target = container.querySelector('[id="' + href.substring(1) + '"]');
+            if (target) target.scrollIntoView({ behavior: 'smooth' });
+          };
+        } else if (!href.startsWith('http')) {
+          a.href = GITHUB_BLOB + 'docs/' + href;
+          a.target = '_blank';
+        }
+      });
+      container.scrollTop = 0;
+      document.getElementById('mdReader').scrollTop = 0;
+    }
+
+    function closeDoc() {
+      document.getElementById('mdReader').classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeDoc();
     });
   </script>
 </body>
