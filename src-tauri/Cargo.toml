@@ -6,7 +6,7 @@ description = "ClawPanel - OpenClaw 可视化管理面板"
 authors = ["qingchencloud"]
 repository = "https://github.com/qingchencloud/clawpanel"
 homepage = "https://github.com/qingchencloud/clawpanel"
-license = "SEE LICENSE IN LICENSE"
+license = "AGPL-3.0"
 
 [lib]
 name = "clawpanel_lib"
