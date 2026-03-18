@@ -25,7 +25,7 @@ function highlightCode(code, lang) {
     .replace(/\b(\d+\.?\d*)\b/g, `${S}0${E}$1${S}c${E}`)
     .replace(/(\/\/.*$|#.*$)/gm, `${S}1${E}$1${S}c${E}`)
     .replace(/(\/\*[\s\S]*?\*\/)/g, `${S}1${E}$1${S}c${E}`)
-    .replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;|&#x27;(?:[^&]|&(?!#x27;))*?&#x27;|`[^`]*`)/g,
+    .replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;|'[^'\n]*'|`[^`]*`)/g,
       `${S}2${E}$1${S}c${E}`)
     .replace(/\b([A-Z][a-zA-Z0-9_]*)\b/g, (m, w) =>
       KEYWORDS.has(w) ? m : `${S}3${E}${w}${S}c${E}`)
@@ -43,7 +43,6 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
 }
 
 // 预加载 Tauri convertFileSrc
@@ -150,7 +149,8 @@ function inlineFormat(text) {
     .replace(/(?<!\w)_(.+?)_(?!\w)/g, '<em>$1</em>')
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
       const safeSrc = resolveImageSrc(src.trim())
-      return `<img src="${safeSrc}" alt="${alt}" class="msg-img" onerror="this.onerror=null;this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'color:var(--text-tertiary);font-size:12px\\'>[图片无法加载: ${escapeHtml(src)}]</span>')" />`
+      const escapedSrc = escapeHtml(src).replace(/\\/g, '&#x5c;')
+      return `<img src="${safeSrc}" alt="${alt}" class="msg-img" onerror="this.onerror=null;this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'color:var(--text-tertiary);font-size:12px\\'>[图片无法加载: ${escapedSrc}]</span>')" />`
     })
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
       const safe = /^https?:|^mailto:/i.test(url.trim()) ? url : '#'

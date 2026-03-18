@@ -156,6 +156,13 @@ export async function checkBackendHealth() {
   }
 }
 
+// 配置保存后防抖重载 Gateway（3 秒内多次写入只触发一次重载）
+let _reloadTimer = null
+function _debouncedReloadGateway() {
+  clearTimeout(_reloadTimer)
+  _reloadTimer = setTimeout(() => { invoke('reload_gateway').catch(() => {}) }, 3000)
+}
+
 // 导出 API
 export const api = {
   // 服务管理（状态用短缓存，操作不缓存）
@@ -169,7 +176,7 @@ export const api = {
   getVersionInfo: () => cachedInvoke('get_version_info', {}, 30000),
   getStatusSummary: () => cachedInvoke('get_status_summary', {}, 60000),
   readOpenclawConfig: () => cachedInvoke('read_openclaw_config'),
-  writeOpenclawConfig: (config) => { invalidate('read_openclaw_config'); return invoke('write_openclaw_config', { config }) },
+  writeOpenclawConfig: (config) => { invalidate('read_openclaw_config'); return invoke('write_openclaw_config', { config }).then(r => { _debouncedReloadGateway(); return r }) },
   readMcpConfig: () => cachedInvoke('read_mcp_config'),
   writeMcpConfig: (config) => { invalidate('read_mcp_config'); return invoke('write_mcp_config', { config }) },
   reloadGateway: () => invoke('reload_gateway'),

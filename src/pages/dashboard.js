@@ -90,7 +90,7 @@ async function loadDashboardData(page, fullRefresh = false) {
   // 第一波：服务状态 + 配置 + 版本 → 立即渲染统计卡片
   const [servicesRes, configRes, versionRes] = await coreP
   const services = servicesRes.status === 'fulfilled' ? servicesRes.value : []
-  const version = versionRes.status === 'fulfilled' ? versionRes.value : {}
+  const version = (versionRes.status === 'fulfilled' && versionRes.value) ? versionRes.value : {}
   const config = configRes.status === 'fulfilled' ? configRes.value : null
   if (servicesRes.status === 'rejected') toast('服务状态加载失败', 'error')
   if (versionRes.status === 'rejected') toast('版本信息加载失败', 'error')

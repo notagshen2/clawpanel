@@ -92,7 +92,7 @@ fn build_http_client_opt(
     user_agent: Option<&str>,
     use_proxy: bool,
 ) -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder().timeout(timeout);
+    let mut builder = reqwest::Client::builder().timeout(timeout).gzip(true);
     if let Some(ua) = user_agent {
         builder = builder.user_agent(ua);
     }

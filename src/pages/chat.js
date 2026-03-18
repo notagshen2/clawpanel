@@ -79,6 +79,32 @@ let _primaryModel = ''
 let _selectedModel = ''
 let _isApplyingModel = false
 
+// ── 托管 Agent ──
+const HOSTED_STATUS = { IDLE: 'idle', RUNNING: 'running', WAITING: 'waiting_reply', PAUSED: 'paused', ERROR: 'error' }
+const HOSTED_SESSIONS_KEY = 'clawpanel-hosted-agent-sessions'
+const HOSTED_SYSTEM_PROMPT = `你是一个托管调度 Agent。你的职责是：根据用户设定的目标，持续引导 OpenClaw AI Agent 完成任务。
+规则：
+1. 你每一轮只输出一条简洁的指令（1-3 句话），发给 OpenClaw 执行
+2. 根据 OpenClaw 的回复评估进展，决定下一步指令
+3. 如果任务已完成或无法继续，回复包含"完成"或"停止"来结束循环
+4. 不要重复相同的指令，不要输出解释性文字，只输出下一步要执行的指令`
+const HOSTED_DEFAULTS = { enabled: false, prompt: '', autoRunAfterTarget: true, stopPolicy: 'self', maxSteps: 50, stepDelayMs: 1200, retryLimit: 2, autoStopMinutes: 0 }
+const HOSTED_RUNTIME_DEFAULT = { status: HOSTED_STATUS.IDLE, stepCount: 0, lastRunAt: 0, lastRunId: '', lastError: '', pending: false, errorCount: 0 }
+const HOSTED_CONTEXT_MAX = 30
+const HOSTED_COMPRESS_THRESHOLD = 20
+let _hostedBtn = null, _hostedPanelEl = null, _hostedBadgeEl = null
+let _hostedPromptEl = null, _hostedMaxStepsEl = null, _hostedStepDelayEl = null, _hostedRetryLimitEl = null
+let _hostedAutoStopEl = null
+let _hostedSaveBtn = null, _hostedStopBtn = null, _hostedCloseBtn = null
+let _hostedDefaults = null
+let _hostedSessionConfig = null
+let _hostedRuntime = { ...HOSTED_RUNTIME_DEFAULT }
+let _hostedBusy = false
+let _hostedAbort = null
+let _hostedLastTargetTs = 0
+let _hostedAutoStopTimer = null
+let _hostedStartTime = 0
+
 export async function render() {
   const page = document.createElement('div')
   page.className = 'page chat-page'
@@ -145,6 +171,48 @@ export async function render() {
         <button class="chat-send-btn" id="chat-send-btn" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
+        <button class="chat-hosted-btn btn btn-sm btn-ghost" id="chat-hosted-btn" title="托管 Agent">
+          <span class="chat-hosted-label">⊕</span>
+          <span class="chat-hosted-badge idle" id="chat-hosted-badge">托管</span>
+        </button>
+      </div>
+      <div class="hosted-agent-panel" id="hosted-agent-panel" style="display:none">
+        <div class="hosted-agent-header">
+          <strong>托管 Agent</strong>
+          <button class="hosted-agent-close" id="hosted-agent-close" title="关闭">&times;</button>
+        </div>
+        <div class="hosted-agent-body">
+          <div class="form-group">
+            <label class="form-label" style="color:var(--accent);font-weight:600">任务目标</label>
+            <textarea class="form-input hosted-agent-prompt" id="hosted-agent-prompt" rows="3" placeholder="例如：持续优化此仓库代码质量，直到没有可改进的地方"></textarea>
+            <div class="form-hint">托管 Agent 会持续引导 OpenClaw 完成此目标。模型使用 <a href="#/assistant" class="hosted-agent-link">AI 助手</a> 的配置。</div>
+          </div>
+          <div class="ha-slider-group">
+            <div class="ha-slider-label">最大回复次数 <span class="ha-slider-val" id="ha-steps-val">50</span></div>
+            <input type="range" class="ha-slider" id="hosted-agent-max-steps" min="5" max="205" step="5" value="50">
+            <div class="ha-slider-ticks"><span>5</span><span>50</span><span>100</span><span>200</span><span>∞</span></div>
+          </div>
+          <div class="ha-timer-group">
+            <div class="ha-timer-header">
+              <span>定时自动停止</span>
+              <label class="ha-toggle"><input type="checkbox" id="hosted-agent-timer-on"><span class="ha-toggle-track"></span></label>
+            </div>
+            <div class="ha-timer-body" id="ha-timer-body" style="display:none">
+              <input type="range" class="ha-slider" id="hosted-agent-auto-stop" min="5" max="120" step="5" value="30">
+              <div class="ha-slider-ticks"><span>5分</span><span>30分</span><span>60分</span><span>120分</span></div>
+              <div class="ha-countdown" id="ha-countdown" style="display:none">
+                <div class="ha-countdown-bar"><div class="ha-countdown-fill" id="ha-countdown-fill"></div></div>
+                <span class="ha-countdown-text" id="ha-countdown-text">剩余 --:--</span>
+              </div>
+            </div>
+          </div>
+          <input type="hidden" id="hosted-agent-step-delay" value="1200">
+          <input type="hidden" id="hosted-agent-retry" value="2">
+        </div>
+        <div class="hosted-agent-actions">
+          <button class="btn btn-primary" id="hosted-agent-save" style="flex:1">▶ 启动托管</button>
+        </div>
+        <div class="hosted-agent-footer" id="hosted-agent-status">就绪</div>
       </div>
       <div class="chat-disconnect-bar" id="chat-disconnect-bar" style="display:none">连接已断开，正在重连...</div>
       <div class="chat-connect-overlay" id="chat-connect-overlay" style="display:none">
@@ -175,6 +243,16 @@ export async function render() {
   _attachPreviewEl = page.querySelector('#chat-attachments-preview')
   _fileInputEl = page.querySelector('#chat-file-input')
   _modelSelectEl = page.querySelector('#chat-model-select')
+  _hostedBtn = page.querySelector('#chat-hosted-btn')
+  _hostedBadgeEl = page.querySelector('#chat-hosted-badge')
+  _hostedPanelEl = page.querySelector('#hosted-agent-panel')
+  _hostedPromptEl = page.querySelector('#hosted-agent-prompt')
+  _hostedMaxStepsEl = page.querySelector('#hosted-agent-max-steps')
+  _hostedStepDelayEl = page.querySelector('#hosted-agent-step-delay')
+  _hostedRetryLimitEl = page.querySelector('#hosted-agent-retry')
+  _hostedAutoStopEl = page.querySelector('#hosted-agent-auto-stop')
+  _hostedSaveBtn = page.querySelector('#hosted-agent-save')
+  _hostedCloseBtn = page.querySelector('#hosted-agent-close')
   page.querySelector('#chat-sidebar')?.classList.toggle('open', getSidebarOpen())
 
   bindEvents(page)
@@ -183,6 +261,7 @@ export async function render() {
   // 首次使用引导提示
   showPageGuide(_messagesEl)
 
+  loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
   // 非阻塞：先返回 DOM，后台连接 Gateway
   connectGateway()
@@ -246,6 +325,21 @@ function bindEvents(page) {
     if (_isStreaming) stopGeneration()
     else sendMessage()
   })
+
+  if (_hostedBtn) _hostedBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleHostedPanel() })
+  if (_hostedCloseBtn) _hostedCloseBtn.addEventListener('click', () => hideHostedPanel())
+  if (_hostedSaveBtn) _hostedSaveBtn.addEventListener('click', () => toggleHostedRun())
+  // 滑块实时值显示
+  if (_hostedMaxStepsEl) _hostedMaxStepsEl.addEventListener('input', () => {
+    const valEl = page.querySelector('#ha-steps-val')
+    if (valEl) valEl.textContent = parseInt(_hostedMaxStepsEl.value) >= 205 ? '∞' : _hostedMaxStepsEl.value
+  })
+  // 定时器开关
+  const timerToggle = page.querySelector('#hosted-agent-timer-on')
+  const timerBody = page.querySelector('#ha-timer-body')
+  if (timerToggle && timerBody) {
+    timerToggle.addEventListener('change', () => { timerBody.style.display = timerToggle.checked ? '' : 'none' })
+  }
 
   const toggleSidebar = () => {
     const sidebar = page.querySelector('#chat-sidebar')
@@ -538,6 +632,8 @@ async function connectGateway() {
         _hasEverConnected = true
         if (bar) bar.style.display = 'none'
         if (overlay) overlay.style.display = 'none'
+        // WS 已连接，主动刷新 Gateway 状态以消除顶部横条延迟
+        import('../lib/app-state.js').then(m => m.refreshGatewayStatus()).catch(() => {})
       } else if (status === 'error') {
         // 连接错误：显示引导遮罩而非底部条
         if (bar) bar.style.display = 'none'
@@ -1094,6 +1190,19 @@ function handleChatEvent(payload) {
         content: _currentAiText, timestamp: Date.now(),
         attachments: _currentAiImages.map(i => ({ category: 'image', mimeType: i.mediaType || 'image/png', url: i.url, content: i.data })).filter(a => a.url || a.content)
       })
+    }
+    // 托管 Agent：捕获 AI 回复，检测停止信号，决定是否继续
+    if (shouldCaptureHostedTarget(payload)) {
+      const capturedText = finalText || _currentAiText || ''
+      if (capturedText) {
+        appendHostedTarget(capturedText)
+        if (detectStopFromText(capturedText)) {
+          appendHostedOutput('OpenClaw 回复包含完成信号，自动停止')
+          stopHostedAgent()
+        } else {
+          maybeTriggerHostedRun()
+        }
+      }
     }
     resetStreamState()
     processMessageQueue()
@@ -1928,6 +2037,391 @@ function updateStatusDot(status) {
   else _statusDot.classList.add('offline')
 }
 
+// ── 托管 Agent 核心逻辑 ──
+
+function toggleHostedPanel() {
+  if (!_hostedPanelEl) return
+  const next = _hostedPanelEl.style.display !== 'block'
+  _hostedPanelEl.style.display = next ? 'block' : 'none'
+  if (next) renderHostedPanel()
+}
+
+function hideHostedPanel() {
+  if (_hostedPanelEl) _hostedPanelEl.style.display = 'none'
+}
+
+function getHostedSessionKey() {
+  return _sessionKey || localStorage.getItem(STORAGE_SESSION_KEY) || 'agent:main:main'
+}
+
+async function loadHostedDefaults() {
+  try {
+    const panel = await api.readPanelConfig()
+    _hostedDefaults = panel?.hostedAgent?.default || null
+  } catch { _hostedDefaults = null }
+}
+
+function loadHostedSessionConfig() {
+  let data = {}
+  try { data = JSON.parse(localStorage.getItem(HOSTED_SESSIONS_KEY) || '{}') } catch { data = {} }
+  const key = getHostedSessionKey()
+  const current = data[key] || {}
+  _hostedSessionConfig = { ...HOSTED_DEFAULTS, ..._hostedDefaults, ...current }
+  if (!_hostedSessionConfig.state) _hostedSessionConfig.state = { ...HOSTED_RUNTIME_DEFAULT }
+  if (!_hostedSessionConfig.history) _hostedSessionConfig.history = []
+  _hostedRuntime = { ...HOSTED_RUNTIME_DEFAULT, ..._hostedSessionConfig.state }
+  updateHostedBadge()
+}
+
+function saveHostedSessionConfig(nextConfig) {
+  let data = {}
+  try { data = JSON.parse(localStorage.getItem(HOSTED_SESSIONS_KEY) || '{}') } catch { data = {} }
+  data[getHostedSessionKey()] = nextConfig
+  localStorage.setItem(HOSTED_SESSIONS_KEY, JSON.stringify(data))
+}
+
+function persistHostedRuntime() {
+  if (!_hostedSessionConfig) return
+  _hostedSessionConfig.state = { ..._hostedRuntime }
+  saveHostedSessionConfig(_hostedSessionConfig)
+}
+
+function updateHostedBadge() {
+  if (!_hostedBadgeEl || !_hostedSessionConfig) return
+  const status = _hostedRuntime.status || HOSTED_STATUS.IDLE
+  const enabled = _hostedSessionConfig.enabled
+  let text = '未启用', cls = 'chat-hosted-badge'
+  if (!enabled) { text = '未启用'; cls += ' idle' }
+  else if (status === HOSTED_STATUS.RUNNING) { text = '运行中'; cls += ' running' }
+  else if (status === HOSTED_STATUS.WAITING) { text = '等待回复'; cls += ' waiting' }
+  else if (status === HOSTED_STATUS.PAUSED) { text = '已暂停'; cls += ' paused' }
+  else if (status === HOSTED_STATUS.ERROR) { text = '异常'; cls += ' error' }
+  else { text = '待命'; cls += ' idle' }
+  _hostedBadgeEl.className = cls
+  _hostedBadgeEl.textContent = text
+}
+
+let _countdownInterval = null
+
+function renderHostedPanel() {
+  if (!_hostedPanelEl || !_hostedSessionConfig) return
+  const isRunning = _hostedSessionConfig.enabled && _hostedRuntime.status !== HOSTED_STATUS.IDLE
+  if (_hostedPromptEl) { _hostedPromptEl.value = _hostedSessionConfig.prompt || ''; _hostedPromptEl.disabled = isRunning }
+  if (_hostedMaxStepsEl) {
+    _hostedMaxStepsEl.value = _hostedSessionConfig.maxSteps || HOSTED_DEFAULTS.maxSteps
+    _hostedMaxStepsEl.disabled = isRunning
+    const valEl = _hostedPanelEl.querySelector('#ha-steps-val')
+    if (valEl) valEl.textContent = _hostedMaxStepsEl.value
+  }
+  if (_hostedAutoStopEl) { _hostedAutoStopEl.value = _hostedSessionConfig.autoStopMinutes || 30; _hostedAutoStopEl.disabled = isRunning }
+  const timerToggle = _hostedPanelEl.querySelector('#hosted-agent-timer-on')
+  const timerBody = _hostedPanelEl.querySelector('#ha-timer-body')
+  if (timerToggle) { timerToggle.checked = (_hostedSessionConfig.autoStopMinutes || 0) > 0; timerToggle.disabled = isRunning }
+  if (timerBody) timerBody.style.display = timerToggle?.checked ? '' : 'none'
+  if (_hostedSaveBtn) {
+    _hostedSaveBtn.textContent = isRunning ? '⏹ 停止托管' : '▶ 启动托管'
+    _hostedSaveBtn.className = isRunning ? 'btn btn-ghost' : 'btn btn-primary'
+    _hostedSaveBtn.style.flex = '1'
+  }
+  // 主按钮同时作为停止按钮，无需额外 stop btn
+  // 状态栏
+  const statusEl = _hostedPanelEl.querySelector('#hosted-agent-status')
+  if (statusEl) {
+    let msg = '就绪'
+    if (_hostedRuntime.lastError) msg = `错误: ${_hostedRuntime.lastError}`
+    else if (isRunning) {
+      const remaining = Math.max(0, _hostedSessionConfig.maxSteps - _hostedRuntime.stepCount)
+      msg = `运行中 · 剩余 ${remaining} 步`
+    }
+    statusEl.textContent = msg
+  }
+  // 倒计时
+  updateCountdown()
+}
+
+function updateCountdown() {
+  const cdEl = _hostedPanelEl?.querySelector('#ha-countdown')
+  const fillEl = _hostedPanelEl?.querySelector('#ha-countdown-fill')
+  const textEl = _hostedPanelEl?.querySelector('#ha-countdown-text')
+  if (!cdEl || !fillEl || !textEl) return
+  if (!_hostedAutoStopTimer || !_hostedStartTime || !_hostedSessionConfig?.autoStopMinutes) {
+    cdEl.style.display = 'none'
+    clearInterval(_countdownInterval); _countdownInterval = null
+    return
+  }
+  cdEl.style.display = ''
+  const totalMs = _hostedSessionConfig.autoStopMinutes * 60000
+  const elapsed = Date.now() - _hostedStartTime
+  const remaining = Math.max(0, totalMs - elapsed)
+  const pct = Math.max(0, Math.min(100, (remaining / totalMs) * 100))
+  fillEl.style.width = pct + '%'
+  const mins = Math.floor(remaining / 60000)
+  const secs = Math.floor((remaining % 60000) / 1000)
+  textEl.textContent = `剩余 ${mins}:${secs.toString().padStart(2, '0')}`
+  if (!_countdownInterval) {
+    _countdownInterval = setInterval(() => updateCountdown(), 1000)
+  }
+  if (remaining <= 0) { clearInterval(_countdownInterval); _countdownInterval = null }
+}
+
+function toggleHostedRun() {
+  if (!_hostedSessionConfig) return
+  if (_hostedSessionConfig.enabled && _hostedRuntime.status !== HOSTED_STATUS.IDLE) {
+    stopHostedAgent()
+  } else {
+    startHostedAgent()
+  }
+}
+
+async function startHostedAgent() {
+  if (!_hostedSessionConfig) return
+  const prompt = (_hostedPromptEl?.value || '').trim()
+  if (!prompt) { toast('请输入任务目标', 'warning'); return }
+  const rawSteps = parseInt(_hostedMaxStepsEl?.value || HOSTED_DEFAULTS.maxSteps, 10)
+  const maxSteps = rawSteps >= 205 ? 999999 : Math.max(1, rawSteps)
+  const stepDelayMs = Math.max(200, parseInt(_hostedStepDelayEl?.value || HOSTED_DEFAULTS.stepDelayMs, 10))
+  const retryLimit = Math.max(0, parseInt(_hostedRetryLimitEl?.value || HOSTED_DEFAULTS.retryLimit, 10))
+  const timerOn = _page?.querySelector('#hosted-agent-timer-on')?.checked
+  const autoStopMinutes = timerOn ? Math.max(0, parseInt(_hostedAutoStopEl?.value || 0, 10)) : 0
+  _hostedSessionConfig = { ..._hostedSessionConfig, prompt, enabled: true, maxSteps, stepDelayMs, retryLimit, autoStopMinutes }
+  const sysContent = HOSTED_SYSTEM_PROMPT + '\n\n用户目标: ' + prompt
+  if (!_hostedSessionConfig.history?.length) _hostedSessionConfig.history = [{ role: 'system', content: sysContent }]
+  else if (_hostedSessionConfig.history[0]?.role === 'system') _hostedSessionConfig.history[0].content = sysContent
+  else _hostedSessionConfig.history.unshift({ role: 'system', content: sysContent })
+  _hostedRuntime = { ...HOSTED_RUNTIME_DEFAULT, status: HOSTED_STATUS.RUNNING }
+  _hostedStartTime = Date.now()
+  persistHostedRuntime()
+  renderHostedPanel()
+  updateHostedBadge()
+  // 启动定时停止
+  clearTimeout(_hostedAutoStopTimer)
+  if (autoStopMinutes > 0) {
+    _hostedAutoStopTimer = setTimeout(() => {
+      appendHostedOutput(`定时 ${autoStopMinutes} 分钟已到，自动停止`)
+      stopHostedAgent()
+    }, autoStopMinutes * 60000)
+  }
+  if (!wsClient.gatewayReady || !_sessionKey) { toast('Gateway 未就绪，暂不启动', 'warning'); return }
+  toast('托管 Agent 已启动', 'success')
+  runHostedAgentStep()
+}
+
+function stopHostedAgent() {
+  if (!_hostedSessionConfig) return
+  if (_hostedAbort) { _hostedAbort.abort(); _hostedAbort = null }
+  clearTimeout(_hostedAutoStopTimer); _hostedAutoStopTimer = null
+  clearInterval(_countdownInterval); _countdownInterval = null
+  _hostedBusy = false
+  _hostedSessionConfig.enabled = false
+  _hostedRuntime.status = HOSTED_STATUS.IDLE
+  _hostedRuntime.pending = false
+  _hostedRuntime.stepCount = 0
+  _hostedRuntime.lastError = ''
+  _hostedRuntime.errorCount = 0
+  _hostedStartTime = 0
+  persistHostedRuntime()
+  renderHostedPanel()
+  updateHostedBadge()
+  toast('托管 Agent 已停止', 'info')
+}
+
+function shouldCaptureHostedTarget(payload) {
+  if (!_hostedSessionConfig?.enabled) return false
+  if (_hostedRuntime.status === HOSTED_STATUS.PAUSED || _hostedRuntime.status === HOSTED_STATUS.ERROR || _hostedRuntime.status === HOSTED_STATUS.IDLE) return false
+  if (payload?.message?.role && payload.message.role !== 'assistant') return false
+  const ts = payload?.timestamp || Date.now()
+  if (ts && ts === _hostedLastTargetTs) return false
+  _hostedLastTargetTs = ts
+  return true
+}
+
+function appendHostedTarget(text) {
+  if (!_hostedSessionConfig) return
+  if (!_hostedSessionConfig.history) _hostedSessionConfig.history = []
+  _hostedSessionConfig.history.push({ role: 'target', content: text, ts: Date.now() })
+  persistHostedRuntime()
+}
+
+function maybeTriggerHostedRun() {
+  if (!_hostedSessionConfig?.enabled) return
+  if (_hostedRuntime.status === HOSTED_STATUS.IDLE || _hostedRuntime.status === HOSTED_STATUS.PAUSED || _hostedRuntime.status === HOSTED_STATUS.ERROR) return
+  if (_hostedRuntime.pending || _hostedBusy) return
+  if (!wsClient.gatewayReady) { _hostedRuntime.status = HOSTED_STATUS.PAUSED; persistHostedRuntime(); updateHostedBadge(); renderHostedPanel(); return }
+  _hostedRuntime.status = HOSTED_STATUS.IDLE
+  runHostedAgentStep()
+}
+
+function compressHostedContext() {
+  if (!_hostedSessionConfig?.history) return
+  const history = _hostedSessionConfig.history
+  if (history.length <= HOSTED_COMPRESS_THRESHOLD) return
+  const sysEntry = history[0]?.role === 'system' ? history[0] : null
+  const recent = history.slice(-8)
+  const older = history.slice(sysEntry ? 1 : 0, -8)
+  const summary = older.map(h => `[${h.role}] ${(h.content || '').slice(0, 80)}`).join('\n')
+  const compressed = []
+  if (sysEntry) compressed.push(sysEntry)
+  compressed.push({ role: 'user', content: `[上下文摘要 - 已压缩 ${older.length} 条历史]\n${summary}`, ts: Date.now() })
+  compressed.push(...recent)
+  _hostedSessionConfig.history = compressed
+  persistHostedRuntime()
+}
+
+function buildHostedMessages() {
+  compressHostedContext()
+  const history = _hostedSessionConfig?.history || []
+  const mapped = history.slice(-HOSTED_CONTEXT_MAX).map(item => {
+    if (item.role === 'system') return { role: 'system', content: item.content }
+    if (item.role === 'assistant') return { role: 'assistant', content: item.content }
+    return { role: 'user', content: item.content }
+  })
+  const hasUserMsg = mapped.some(m => m.role === 'user' || m.role === 'assistant')
+  if (!hasUserMsg && _hostedSessionConfig?.prompt) {
+    mapped.push({ role: 'user', content: _hostedSessionConfig.prompt })
+  }
+  return mapped
+}
+
+function detectStopFromText(text) {
+  if (!text) return false
+  return /\b(完成|无需继续|结束|停止|done|stop|final)\b/i.test(text)
+}
+
+async function runHostedAgentStep() {
+  if (_hostedBusy || !_hostedSessionConfig?.enabled) return
+  const prompt = (_hostedSessionConfig.prompt || '').trim()
+  if (!prompt) return
+  if (!wsClient.gatewayReady || !_sessionKey) {
+    _hostedRuntime.status = HOSTED_STATUS.PAUSED
+    _hostedRuntime.lastError = 'Gateway 未就绪'
+    persistHostedRuntime(); updateHostedBadge()
+    appendHostedOutput('需要人工介入: Gateway 未就绪')
+    return
+  }
+  if (_hostedRuntime.errorCount >= _hostedSessionConfig.retryLimit) {
+    _hostedRuntime.status = HOSTED_STATUS.ERROR
+    persistHostedRuntime(); updateHostedBadge()
+    appendHostedOutput('需要人工介入: 连续错误超过阈值')
+    return
+  }
+  if (_hostedRuntime.stepCount >= _hostedSessionConfig.maxSteps) {
+    _hostedRuntime.status = HOSTED_STATUS.IDLE
+    persistHostedRuntime(); updateHostedBadge()
+    return
+  }
+  _hostedBusy = true
+  _hostedRuntime.pending = true
+  _hostedRuntime.status = HOSTED_STATUS.RUNNING
+  _hostedRuntime.lastRunAt = Date.now()
+  _hostedRuntime.lastRunId = uuid()
+  persistHostedRuntime(); updateHostedBadge()
+
+  const delay = _hostedSessionConfig.stepDelayMs || HOSTED_DEFAULTS.stepDelayMs
+  if (delay > 0) await new Promise(r => setTimeout(r, delay))
+
+  try {
+    const messages = buildHostedMessages()
+    let resultText = ''
+    await callHostedAI(messages, (chunk) => { resultText += chunk })
+
+    _hostedRuntime.stepCount += 1
+    _hostedRuntime.errorCount = 0
+    _hostedRuntime.lastError = ''
+
+    _hostedSessionConfig.history.push({ role: 'assistant', content: resultText, ts: Date.now() })
+    persistHostedRuntime()
+    appendHostedOutput(resultText + ` | step=${_hostedRuntime.stepCount}`)
+
+    // 如果 AI 回复中有「执行命令」类内容，通过 Gateway 发送给 Agent
+    const instruction = resultText.trim()
+    if (instruction && !detectStopFromText(instruction)) {
+      _hostedRuntime.status = HOSTED_STATUS.WAITING
+      _hostedRuntime.pending = false
+      persistHostedRuntime(); updateHostedBadge()
+      // 将指令发给 Gateway Agent
+      try { await wsClient.chatSend(_sessionKey, instruction) } catch {}
+    } else {
+      _hostedRuntime.status = HOSTED_STATUS.IDLE
+      _hostedRuntime.pending = false
+      persistHostedRuntime(); updateHostedBadge()
+    }
+  } catch (e) {
+    _hostedRuntime.errorCount = (_hostedRuntime.errorCount || 0) + 1
+    _hostedRuntime.lastError = e.message || String(e)
+    _hostedRuntime.pending = false
+    if (_hostedRuntime.errorCount >= _hostedSessionConfig.retryLimit) {
+      _hostedRuntime.status = HOSTED_STATUS.ERROR
+      persistHostedRuntime(); updateHostedBadge()
+      appendHostedOutput('需要人工介入: ' + _hostedRuntime.lastError)
+      return
+    }
+    persistHostedRuntime(); updateHostedBadge()
+    setTimeout(() => { _hostedBusy = false; runHostedAgentStep() }, delay)
+    return
+  } finally {
+    _hostedBusy = false
+  }
+}
+
+async function callHostedAI(messages, onChunk) {
+  let config
+  try {
+    const raw = localStorage.getItem('clawpanel-assistant')
+    const stored = raw ? JSON.parse(raw) : {}
+    config = { baseUrl: stored.baseUrl || '', apiKey: stored.apiKey || '', model: stored.model || '', temperature: stored.temperature || 0.7, apiType: stored.apiType || 'openai-completions' }
+  } catch { config = { baseUrl: '', apiKey: '', model: '', temperature: 0.7, apiType: 'openai-completions' } }
+
+  if (!config.baseUrl || !config.model) throw new Error('托管 Agent 未配置模型（请在 AI 助手页面配置）')
+
+  let base = config.baseUrl.replace(/\/+$/, '').replace(/\/chat\/completions\/?$/, '').replace(/\/completions\/?$/, '').replace(/\/messages\/?$/, '').replace(/\/models\/?$/, '')
+  if (_hostedAbort) { _hostedAbort.abort(); _hostedAbort = null }
+  _hostedAbort = new AbortController()
+  const signal = _hostedAbort.signal
+  const timeout = setTimeout(() => { if (_hostedAbort) _hostedAbort.abort() }, 120000)
+
+  try {
+    const headers = { 'Content-Type': 'application/json' }
+    if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`
+    const body = { model: config.model, messages, stream: true, temperature: config.temperature || 0.7 }
+    const resp = await fetch(base + '/chat/completions', { method: 'POST', headers, body: JSON.stringify(body), signal })
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '')
+      let errMsg = `API 错误 ${resp.status}`
+      try { errMsg = JSON.parse(errText).error?.message || errMsg } catch {}
+      throw new Error(errMsg)
+    }
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data:')) continue
+        const data = trimmed.slice(5).trim()
+        if (data === '[DONE]') return
+        try { const json = JSON.parse(data); if (json.choices?.[0]?.delta?.content) onChunk(json.choices[0].delta.content) } catch {}
+      }
+    }
+  } finally {
+    clearTimeout(timeout)
+    _hostedAbort = null
+  }
+}
+
+function appendHostedOutput(text) {
+  if (!text || !_messagesEl) return
+  const wrap = document.createElement('div')
+  wrap.className = 'msg msg-system msg-hosted'
+  wrap.textContent = `[托管 Agent] ${text}`
+  _messagesEl.insertBefore(wrap, _typingEl)
+  scrollToBottom()
+}
+
 // ── 页面离开清理 ──
 
 export function cleanup() {
@@ -1936,7 +2430,7 @@ export function cleanup() {
   if (_unsubReady) { _unsubReady(); _unsubReady = null }
   if (_unsubStatus) { _unsubStatus(); _unsubStatus = null }
   clearTimeout(_streamSafetyTimer)
-  // 不断开 wsClient —— 它是全局单例，保持连接供下次进入复用
+  if (_hostedAbort) { _hostedAbort.abort(); _hostedAbort = null }
   _sessionKey = null
   _page = null
   _messagesEl = null
@@ -1959,4 +2453,21 @@ export function cleanup() {
   _isSending = false
   _messageQueue = []
   _lastHistoryHash = ''
+  _hostedBtn = null
+  _hostedPanelEl = null
+  _hostedBadgeEl = null
+  _hostedPromptEl = null
+  _hostedEnableEl = null
+  _hostedMaxStepsEl = null
+  _hostedStepDelayEl = null
+  _hostedRetryLimitEl = null
+  _hostedSaveBtn = null
+  _hostedPauseBtn = null
+  _hostedStopBtn = null
+  _hostedCloseBtn = null
+  _hostedGlobalSyncEl = null
+  _hostedSessionConfig = null
+  _hostedDefaults = null
+  _hostedRuntime = { ...HOSTED_RUNTIME_DEFAULT }
+  _hostedBusy = false
 }
