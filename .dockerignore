@@ -47,9 +47,22 @@ release_body.md
 release_body.md.bak
 r2-archives/
 
-# 非构建必需内容
+# 文档 / 测试 / 仓库元数据
+CHANGELOG.md
+CONTRIBUTING.md
+README.md
+README.en.md
+SECURITY.md
+LICENSE
 docs/
 tests/
+
+# 桌面端与本地脚本（Docker Web 构建不需要）
+src-tauri/
+build.ps1
+build.sh
+deploy.sh
+dev.ps1
 
 # 内部/临时文件
 BLOCKING_ISSUES_REPORT.md
